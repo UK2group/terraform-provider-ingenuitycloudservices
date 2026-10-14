@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -184,21 +186,26 @@ type FriendlyNameUpdateRequest struct {
 	FriendlyName string `json:"friendly_name"`
 }
 
-// NewICSClient creates a new ICS API client
-func NewICSClient(apiToken, baseURL string) *ICSClient {
+// NewICSClient creates a new ICS API client. baseURL must be an absolute
+// http(s) URL so that requests can only ever be sent to the configured host.
+func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" ||
+		u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return nil, fmt.Errorf("invalid base URL %q: must be an absolute http(s) URL without credentials, query or fragment", baseURL)
+	}
+
 	return &ICSClient{
 		APIToken: apiToken,
-		BaseURL:  baseURL,
+		BaseURL:  strings.TrimRight(baseURL, "/"),
 		HTTPClient: &http.Client{
 			Timeout: 300 * time.Second, // Increased to 5 minutes for server ordering
 		},
-	}
+	}, nil
 }
 
 // makeRequest makes an HTTP request to the ICS API
 func (c *ICSClient) makeRequest(method, endpoint string, body interface{}) (*http.Response, error) {
-	url := fmt.Sprintf("%s%s", c.BaseURL, endpoint)
-
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -208,7 +215,7 @@ func (c *ICSClient) makeRequest(method, endpoint string, body interface{}) (*htt
 		reqBody = bytes.NewBuffer(jsonBody)
 	}
 
-	req, err := http.NewRequest(method, url, reqBody)
+	req, err := http.NewRequest(method, c.BaseURL+endpoint, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -348,7 +355,7 @@ func (c *ICSClient) GetServerByServiceID(serviceID int) (*Server, error) {
 
 // CancelServer cancels/deletes a server (hourly billed servers only)
 func (c *ICSClient) CancelServer(serverID string) error {
-	endpoint := fmt.Sprintf("/rest-api/servers/%s/cancel", serverID)
+	endpoint := "/rest-api/servers/" + url.PathEscape(serverID) + "/cancel"
 	resp, err := c.makeRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("failed to cancel server: %w", err)
@@ -369,7 +376,10 @@ func (c *ICSClient) CancelServer(serverID string) error {
 
 // GetAddons retrieves available addons for a specific SKU and location
 func (c *ICSClient) GetAddons(skuProductName, locationCode string) (*AddonsResponse, error) {
-	endpoint := fmt.Sprintf("/rest-api/server-orders/list-addons?sku_product_name=%s&location_code=%s", skuProductName, locationCode)
+	endpoint := "/rest-api/server-orders/list-addons?" + url.Values{
+		"sku_product_name": {skuProductName},
+		"location_code":    {locationCode},
+	}.Encode()
 	resp, err := c.makeRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get addons: %w", err)
@@ -557,7 +567,7 @@ func (c *ICSClient) DeleteSSHKey(keyID int) error {
 
 // UpdateServerFriendlyName updates the friendly name of a server
 func (c *ICSClient) UpdateServerFriendlyName(serverID, friendlyName string) error {
-	endpoint := fmt.Sprintf("/rest-api/servers/%s/friendly-name", serverID)
+	endpoint := "/rest-api/servers/" + url.PathEscape(serverID) + "/friendly-name"
 
 	request := FriendlyNameUpdateRequest{
 		FriendlyName: friendlyName,

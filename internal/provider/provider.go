@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -81,7 +82,11 @@ func (p *ICSProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	}
 
 	// Create properly initialized client for data sources and resources
-	client := NewICSClient(apiToken, baseURL)
+	client, err := NewICSClient(apiToken, baseURL)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("base_url"), "Invalid Base URL Configuration", err.Error())
+		return
+	}
 
 	resp.DataSourceData = client
 	resp.ResourceData = client
