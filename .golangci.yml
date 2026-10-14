@@ -1,0 +1,8 @@
+version: "2"
+
+linters:
+  exclusions:
+    # Keep the golangci-lint v1 default exclusions (e.g. unchecked Close errors)
+    # that this repo was linted with before the v2 upgrade.
+    presets:
+      - std-error-handling
