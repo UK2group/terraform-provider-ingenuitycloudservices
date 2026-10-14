@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -200,6 +201,17 @@ func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 		BaseURL:  strings.TrimRight(baseURL, "/"),
 		HTTPClient: &http.Client{
 			Timeout: 300 * time.Second, // Increased to 5 minutes for server ordering
+			// Go forwards custom headers such as X-Api-Token on redirects, so
+			// refuse any redirect that leaves the configured origin.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if req.URL.Scheme != u.Scheme || req.URL.Host != u.Host {
+					return fmt.Errorf("refusing redirect to %s://%s outside the base URL origin", req.URL.Scheme, req.URL.Host)
+				}
+				if len(via) >= 10 {
+					return errors.New("stopped after 10 redirects")
+				}
+				return nil
+			},
 		},
 	}, nil
 }

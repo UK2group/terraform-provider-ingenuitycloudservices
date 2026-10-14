@@ -46,3 +46,32 @@ func TestClientEscapesUserSuppliedValues(t *testing.T) {
 		t.Errorf("GetAddons requested query %q, want %q", gotQuery, want)
 	}
 }
+
+func TestClientRefusesCrossOriginRedirect(t *testing.T) {
+	var leakedToken string
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leakedToken = r.Header.Get("X-Api-Token")
+	}))
+	defer other.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rest-api/servers/1/cancel" {
+			http.Redirect(w, r, "/rest-api/servers/2/cancel", http.StatusTemporaryRedirect)
+			return
+		}
+		http.Redirect(w, r, other.URL, http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+
+	client, err := NewICSClient("secret", srv.URL)
+	if err != nil {
+		t.Fatalf("NewICSClient: %v", err)
+	}
+
+	if err := client.CancelServer("1"); err == nil {
+		t.Error("CancelServer followed a cross-origin redirect, want error")
+	}
+	if leakedToken != "" {
+		t.Errorf("API token was sent to the redirect target: %q", leakedToken)
+	}
+}
