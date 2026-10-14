@@ -14,6 +14,8 @@ func TestNewICSClientRejectsInvalidBaseURL(t *testing.T) {
 		"https://user:pass@api.ingenuitycloudservices.com",
 		"https://api.ingenuitycloudservices.com?x=1",
 		"https://api.ingenuitycloudservices.com#frag",
+		"https://api.ingenuitycloudservices.com/?",
+		"https://api.ingenuitycloudservices.com/#",
 	} {
 		if _, err := NewICSClient("token", baseURL); err == nil {
 			t.Errorf("NewICSClient(%q) expected error, got nil", baseURL)

@@ -192,7 +192,7 @@ type FriendlyNameUpdateRequest struct {
 func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" ||
-		u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		u.User != nil || strings.ContainsAny(baseURL, "?#") {
 		return nil, fmt.Errorf("invalid base URL %q: must be an absolute http(s) URL without credentials, query or fragment", baseURL)
 	}
 
