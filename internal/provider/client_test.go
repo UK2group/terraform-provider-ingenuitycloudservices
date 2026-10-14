@@ -16,6 +16,7 @@ func TestNewICSClientRejectsInvalidBaseURL(t *testing.T) {
 		"https://api.ingenuitycloudservices.com#frag",
 		"https://api.ingenuitycloudservices.com/?",
 		"https://api.ingenuitycloudservices.com/#",
+		"http://:8080",
 	} {
 		if _, err := NewICSClient("token", baseURL); err == nil {
 			t.Errorf("NewICSClient(%q) expected error, got nil", baseURL)
@@ -41,6 +42,12 @@ func TestClientEscapesUserSuppliedValues(t *testing.T) {
 	}
 	if want := "/rest-api/servers/..%2F..%2Fother%3Fx=1/cancel"; gotPath != want || gotQuery != "" {
 		t.Errorf("CancelServer requested path %q query %q, want %q with no query", gotPath, gotQuery, want)
+	}
+
+	for _, id := range []string{"", ".", ".."} {
+		if err := client.CancelServer(id); err == nil {
+			t.Errorf("CancelServer(%q) expected error, got nil", id)
+		}
 	}
 
 	_, _ = client.GetAddons("sku&location_code=evil", "LON")

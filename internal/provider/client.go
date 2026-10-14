@@ -191,9 +191,10 @@ type FriendlyNameUpdateRequest struct {
 // http(s) URL so that requests can only ever be sent to the configured host.
 func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 	u, err := url.Parse(baseURL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" ||
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" ||
 		u.User != nil || strings.ContainsAny(baseURL, "?#") {
-		return nil, fmt.Errorf("invalid base URL %q: must be an absolute http(s) URL without credentials, query or fragment", baseURL)
+		// The value is not echoed back because it may contain credentials.
+		return nil, errors.New("invalid base URL: must be an absolute http(s) URL with a host and without credentials, query or fragment")
 	}
 
 	return &ICSClient{
@@ -214,6 +215,15 @@ func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 			},
 		},
 	}, nil
+}
+
+// serverPath returns the API path for a server sub-resource. The ID is escaped
+// and dot segments are rejected so it always stays a single path segment.
+func serverPath(serverID, action string) (string, error) {
+	if serverID == "" || serverID == "." || serverID == ".." {
+		return "", fmt.Errorf("invalid server ID %q", serverID)
+	}
+	return "/rest-api/servers/" + url.PathEscape(serverID) + "/" + action, nil
 }
 
 // makeRequest makes an HTTP request to the ICS API
@@ -367,7 +377,10 @@ func (c *ICSClient) GetServerByServiceID(serviceID int) (*Server, error) {
 
 // CancelServer cancels/deletes a server (hourly billed servers only)
 func (c *ICSClient) CancelServer(serverID string) error {
-	endpoint := "/rest-api/servers/" + url.PathEscape(serverID) + "/cancel"
+	endpoint, err := serverPath(serverID, "cancel")
+	if err != nil {
+		return err
+	}
 	resp, err := c.makeRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("failed to cancel server: %w", err)
@@ -579,7 +592,10 @@ func (c *ICSClient) DeleteSSHKey(keyID int) error {
 
 // UpdateServerFriendlyName updates the friendly name of a server
 func (c *ICSClient) UpdateServerFriendlyName(serverID, friendlyName string) error {
-	endpoint := "/rest-api/servers/" + url.PathEscape(serverID) + "/friendly-name"
+	endpoint, err := serverPath(serverID, "friendly-name")
+	if err != nil {
+		return err
+	}
 
 	request := FriendlyNameUpdateRequest{
 		FriendlyName: friendlyName,
