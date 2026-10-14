@@ -3,6 +3,7 @@ package provider
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -82,5 +83,24 @@ func TestClientRefusesCrossOriginRedirect(t *testing.T) {
 	}
 	if leakedToken != "" {
 		t.Errorf("API token was sent to the redirect target: %q", leakedToken)
+	}
+}
+
+func TestOriginNormalizesHostAndDefaultPort(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		same bool
+	}{
+		{"https://Example.com:443/x", "https://example.com/y", true},
+		{"http://example.com", "http://example.com:80", true},
+		{"https://example.com", "http://example.com", false},
+		{"https://example.com", "https://example.com:8443", false},
+		{"https://example.com", "https://evil.example", false},
+	} {
+		a, _ := url.Parse(tc.a)
+		b, _ := url.Parse(tc.b)
+		if got := origin(a) == origin(b); got != tc.same {
+			t.Errorf("origin(%q) == origin(%q) is %v, want %v", tc.a, tc.b, got, tc.same)
+		}
 	}
 }

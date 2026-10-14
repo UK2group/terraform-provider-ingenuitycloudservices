@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -197,6 +198,7 @@ func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 		return nil, errors.New("invalid base URL: must be an absolute http(s) URL with a host and without credentials, query or fragment")
 	}
 
+	baseOrigin := origin(u)
 	return &ICSClient{
 		APIToken: apiToken,
 		BaseURL:  strings.TrimRight(baseURL, "/"),
@@ -205,7 +207,7 @@ func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 			// Go forwards custom headers such as X-Api-Token on redirects, so
 			// refuse any redirect that leaves the configured origin.
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if req.URL.Scheme != u.Scheme || req.URL.Host != u.Host {
+				if origin(req.URL) != baseOrigin {
 					return fmt.Errorf("refusing redirect to %s://%s outside the base URL origin", req.URL.Scheme, req.URL.Host)
 				}
 				if len(via) >= 10 {
@@ -215,6 +217,19 @@ func NewICSClient(apiToken, baseURL string) (*ICSClient, error) {
 			},
 		},
 	}, nil
+}
+
+// origin returns the scheme, lower-cased host and effective port of u, so that
+// e.g. https://Example.com:443 and https://example.com compare equal.
+func origin(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if u.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return u.Scheme + "://" + net.JoinHostPort(strings.ToLower(u.Hostname()), port)
 }
 
 // serverPath returns the API path for a server sub-resource. The ID is escaped
